@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { socket } from '../utils/socket';
 import { useCosmosStore } from '../utils/store';
 
@@ -12,12 +12,32 @@ export default function LobbyScreen() {
   const [username, setUsername] = useState('');
   const [selectedAvatar, setSelectedAvatar] = useState(AVATARS[0]);
   const [selectedColor, setSelectedColor] = useState(COLORS[0]);
+  const [loading, setLoading] = useState(false);
   const setPhase = useCosmosStore((s) => s.setPhase);
+  const setSelf = useCosmosStore((s) => s.setSelf);
+
+  // Connect socket and listen for server confirmation before switching phase
+  useEffect(() => {
+    if (!socket.connected) socket.connect();
+
+    const onSelf = (user) => {
+      setSelf(user);
+      setPhase('cosmos');
+    };
+    socket.on('self', onSelf);
+    return () => {
+      socket.off('self', onSelf);
+    };
+  }, []);
 
   const enter = () => {
-    if (!username.trim()) return;
-    socket.emit('join', { username: username.trim(), avatar: selectedAvatar, color: selectedColor });
-    setPhase('cosmos');
+    if (!username.trim() || loading) return;
+    setLoading(true);
+    socket.emit('join', {
+      username: username.trim(),
+      avatar: selectedAvatar,
+      color: selectedColor,
+    });
   };
 
   const onKey = (e) => { if (e.key === 'Enter') enter(); };
@@ -54,11 +74,9 @@ export default function LobbyScreen() {
           <div style={{ fontSize: 48, marginBottom: 12 }} className="animate-float">✦</div>
           <h1 style={{
             fontFamily: 'Space Mono, monospace',
-            fontSize: 28,
-            fontWeight: 700,
+            fontSize: 28, fontWeight: 700,
             color: 'var(--cosmos-accent)',
-            letterSpacing: '-0.5px',
-            marginBottom: 6,
+            letterSpacing: '-0.5px', marginBottom: 6,
           }}>Virtual Cosmos</h1>
           <p style={{ color: 'var(--cosmos-muted)', fontSize: 14, fontWeight: 300 }}>
             A proximity-based social space
@@ -134,22 +152,22 @@ export default function LobbyScreen() {
         {/* Enter button */}
         <button
           onClick={enter}
-          disabled={!username.trim()}
+          disabled={!username.trim() || loading}
           style={{
             width: '100%', padding: '14px',
-            background: username.trim()
+            background: username.trim() && !loading
               ? `linear-gradient(135deg, var(--cosmos-accent), var(--cosmos-accent2))`
               : 'var(--cosmos-border)',
             border: 'none', borderRadius: 12,
-            color: username.trim() ? '#0a0a12' : 'var(--cosmos-muted)',
+            color: username.trim() && !loading ? '#0a0a12' : 'var(--cosmos-muted)',
             fontSize: 15, fontWeight: 700, fontFamily: 'Space Mono',
-            cursor: username.trim() ? 'pointer' : 'not-allowed',
+            cursor: username.trim() && !loading ? 'pointer' : 'not-allowed',
             letterSpacing: '0.05em',
             transition: 'all 0.2s',
-            boxShadow: username.trim() ? '0 8px 32px rgba(110,231,247,0.25)' : 'none',
+            boxShadow: username.trim() && !loading ? '0 8px 32px rgba(110,231,247,0.25)' : 'none',
           }}
         >
-          ENTER THE COSMOS →
+          {loading ? 'CONNECTING…' : 'ENTER THE COSMOS →'}
         </button>
 
         <p style={{

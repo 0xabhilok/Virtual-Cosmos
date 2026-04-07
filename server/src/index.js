@@ -89,9 +89,9 @@ io.on('connection', (socket) => {
   console.log(`🔌 Socket connected: ${socket.id}`);
 
   // ── join: user enters the cosmos ──────────────────────────────────────────
-  socket.on('join', ({ username, avatar }) => {
+  socket.on('join', ({ username, avatar, color: clientColor }) => {
     const userId = uuidv4();
-    const color = `hsl(${Math.floor(Math.random() * 360)}, 80%, 65%)`;
+    const color = clientColor || `hsl(${Math.floor(Math.random() * 360)}, 80%, 65%)`;
 
     const user = {
       userId,

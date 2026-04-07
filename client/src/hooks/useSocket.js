@@ -3,24 +3,18 @@ import { socket } from '../utils/socket';
 import { useCosmosStore } from '../utils/store';
 
 export function useSocket() {
-  const {
-    setSelf,
-    addUser,
-    removeUser,
-    updateUserPosition,
-    setAllUsers,
-    setNearbyUsers,
-    addMessage,
-    activeChatSocketId,
-    incrementUnread,
-  } = useCosmosStore();
-
   useEffect(() => {
-    socket.connect();
+    // socket is already connected from LobbyScreen - don't reconnect
 
-    socket.on('self', (user) => {
-      setSelf(user);
-    });
+    const {
+      addUser,
+      removeUser,
+      updateUserPosition,
+      setAllUsers,
+      setNearbyUsers,
+      addMessage,
+      incrementUnread,
+    } = useCosmosStore.getState();
 
     socket.on('users:init', (usersArray) => {
       setAllUsers(usersArray);
@@ -44,23 +38,21 @@ export function useSocket() {
 
     socket.on('chat:message', (msg) => {
       addMessage(msg);
-      // If chat panel isn't open for that room, count as unread
-      const isActive =
-        msg.roomId.includes(activeChatSocketId || '___NONE___');
+      // Read activeChatSocketId fresh from store to avoid stale closure
+      const { activeChatSocketId } = useCosmosStore.getState();
+      const isActive = activeChatSocketId && msg.roomId.includes(activeChatSocketId);
       if (!isActive) {
         incrementUnread();
       }
     });
 
     return () => {
-      socket.off('self');
       socket.off('users:init');
       socket.off('user:joined');
       socket.off('user:moved');
       socket.off('user:left');
       socket.off('proximity:update');
       socket.off('chat:message');
-      socket.disconnect();
     };
   }, []);
 }

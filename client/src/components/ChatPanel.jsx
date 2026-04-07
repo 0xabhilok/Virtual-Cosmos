@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { socket } from '../utils/socket';
 import { useCosmosStore } from '../utils/store';
 
-function roomId(a, b) {
+function buildRoomId(a, b) {
   return [a, b].sort().join('::');
 }
 
@@ -18,7 +18,12 @@ export default function ChatPanel() {
   const nearbyUsers = useCosmosStore((s) => s.nearbyUsers);
   const resetUnread = useCosmosStore((s) => s.resetUnread);
 
-  const rid = self && activeChatSocketId ? roomId(self.socketId, activeChatSocketId) : null;
+  // Use socket.id as fallback — it's always the canonical self identifier
+  const mySocketId = self?.socketId || socket.id;
+  const rid = mySocketId && activeChatSocketId
+    ? buildRoomId(mySocketId, activeChatSocketId)
+    : null;
+
   const roomMessages = rid ? (messages[rid] || []) : [];
   const chatPartner = activeChatSocketId ? users[activeChatSocketId] : null;
   const isStillNear = nearbyUsers.some((u) => u.socketId === activeChatSocketId);
@@ -31,10 +36,9 @@ export default function ChatPanel() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [roomMessages.length]);
 
-  // Auto-close chat when user walks away
+  // Auto-close when user walks away
   useEffect(() => {
     if (activeChatSocketId && !isStillNear) {
-      // Small delay so the disconnect feels natural
       const t = setTimeout(closeChat, 800);
       return () => clearTimeout(t);
     }
@@ -57,7 +61,7 @@ export default function ChatPanel() {
       position: 'fixed',
       right: 0, top: 0, bottom: 0,
       width: 320,
-      background: 'rgba(13,13,25,0.92)',
+      background: 'rgba(13,13,25,0.95)',
       backdropFilter: 'blur(20px)',
       borderLeft: '1px solid var(--cosmos-border)',
       display: 'flex',
@@ -68,14 +72,12 @@ export default function ChatPanel() {
       <div style={{
         padding: '18px 20px',
         borderBottom: '1px solid var(--cosmos-border)',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 12,
+        display: 'flex', alignItems: 'center', gap: 12,
       }}>
         <div style={{ position: 'relative' }}>
           <div style={{
             width: 40, height: 40, borderRadius: '50%',
-            background: chatPartner?.color || 'var(--cosmos-accent)',
+            background: chatPartner?.color || '#b57bee',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 20, border: '2px solid var(--cosmos-border)',
           }}>
@@ -95,7 +97,8 @@ export default function ChatPanel() {
             {chatPartner?.username || 'Unknown'}
           </div>
           <div style={{
-            fontSize: 11, color: isStillNear ? '#6ef7a0' : 'var(--cosmos-muted)',
+            fontSize: 11,
+            color: isStillNear ? '#6ef7a0' : 'var(--cosmos-muted)',
             transition: 'color 0.4s',
           }}>
             {isStillNear ? '● In range' : '○ Moving away…'}
@@ -120,13 +123,11 @@ export default function ChatPanel() {
           padding: '10px 14px',
           background: 'rgba(247,110,110,0.1)',
           border: '1px solid rgba(247,110,110,0.25)',
-          borderRadius: 10,
-          fontSize: 12,
-          color: '#f79e9e',
+          borderRadius: 10, fontSize: 12, color: '#f79e9e',
           display: 'flex', alignItems: 'center', gap: 8,
         }}>
           <span>⚠</span>
-          <span>You're moving out of range. Chat will close.</span>
+          <span>Moving out of range. Chat will close.</span>
         </div>
       )}
 
@@ -138,7 +139,7 @@ export default function ChatPanel() {
       }}>
         {roomMessages.length === 0 && (
           <div style={{
-            textAlign: 'center', marginTop: 'auto', marginBottom: 'auto',
+            textAlign: 'center', margin: 'auto',
             color: 'var(--cosmos-muted)', fontSize: 13,
           }}>
             <div style={{ fontSize: 28, marginBottom: 8 }}>💬</div>
@@ -148,7 +149,8 @@ export default function ChatPanel() {
         )}
 
         {roomMessages.map((msg, i) => {
-          const isMine = msg.senderSocketId === self?.socketId;
+          // Determine if this message is from self using senderSocketId
+          const isMine = msg.senderSocketId === mySocketId;
           return (
             <div key={i} className="animate-slide-in-up" style={{
               display: 'flex',
@@ -158,7 +160,7 @@ export default function ChatPanel() {
               {!isMine && (
                 <div style={{
                   width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
-                  background: msg.senderColor || 'var(--cosmos-accent)',
+                  background: msg.senderColor || '#b57bee',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: 14,
                 }}>
@@ -193,10 +195,7 @@ export default function ChatPanel() {
       </div>
 
       {/* Input */}
-      <div style={{
-        padding: '16px',
-        borderTop: '1px solid var(--cosmos-border)',
-      }}>
+      <div style={{ padding: '16px', borderTop: '1px solid var(--cosmos-border)' }}>
         <div style={{
           display: 'flex', gap: 8,
           background: 'rgba(255,255,255,0.04)',
