@@ -304,7 +304,7 @@ export default function CosmosCanvas() {
         bottom: 0,
         overflow: 'hidden',
         transition: 'right 0.35s cubic-bezier(0.16,1,0.3,1)',
-        cursor: 'none',
+        cursor: 'default',
       }}
     />
   );

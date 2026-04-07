@@ -106,7 +106,7 @@ export default function TopBar() {
         fontFamily: 'Space Mono', letterSpacing: '0.05em',
         display: 'flex', gap: 8,
       }}>
-        {['W', 'A', 'S', 'D'].map((k) => (
+        {['W', 'A', 'S', 'D', 'C'].map((k) => (
           <kbd key={k} style={{
             padding: '2px 6px',
             background: 'var(--cosmos-surface)',
@@ -115,7 +115,7 @@ export default function TopBar() {
             color: 'var(--cosmos-text)',
           }}>{k}</kbd>
         ))}
-        <span style={{ alignSelf: 'center' }}>to move</span>
+        <span style={{ alignSelf: 'center' }}>move · C chat</span>
       </div>
 
       <div style={{ width: 1, height: 20, background: 'var(--cosmos-border)', flexShrink: 0 }} />
