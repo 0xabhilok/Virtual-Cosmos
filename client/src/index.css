@@ -3,86 +3,44 @@
 @tailwind utilities;
 
 :root {
-  --cosmos-bg: #0a0a12;
-  --cosmos-grid: #ffffff08;
-  --cosmos-accent: #6ee7f7;
-  --cosmos-accent2: #b57bee;
-  --cosmos-surface: #13131f;
-  --cosmos-border: #ffffff12;
-  --cosmos-text: #e8e8f0;
-  --cosmos-muted: #6b6b8a;
+  --bg:        #f5f0e8;
+  --bg2:       #ede8df;
+  --surface:   #faf7f2;
+  --surface2:  #f0ebe0;
+  --border:    #d8d0c0;
+  --border2:   #c8bfaa;
+  --text:      #1a1612;
+  --text2:     #5a5248;
+  --muted:     #9a9080;
+  --accent:    #c17a3a;
+  --accent2:   #8b5e2c;
+  --blue:      #3a6fb5;
+  --green:     #3a8a5a;
+  --red:       #c23a3a;
 }
 
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 html, body, #root {
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  background: var(--cosmos-bg);
-  color: var(--cosmos-text);
+  width: 100%; height: 100%; overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
   font-family: 'DM Sans', sans-serif;
 }
 
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 4px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: var(--cosmos-border);
-  border-radius: 4px;
-}
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 
-/* Animations */
-@keyframes pulse-ring {
-  0% { transform: scale(1); opacity: 0.6; }
-  100% { transform: scale(2.5); opacity: 0; }
-}
+@keyframes slide-up    { from { transform:translateY(12px); opacity:0 } to { transform:translateY(0); opacity:1 } }
+@keyframes slide-right { from { transform:translateX(100%); opacity:0 } to { transform:translateX(0); opacity:1 } }
+@keyframes fade-in     { from { opacity:0 } to { opacity:1 } }
+@keyframes float       { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
+@keyframes pop         { 0%{transform:scale(0.8);opacity:0} 70%{transform:scale(1.05)} 100%{transform:scale(1);opacity:1} }
+@keyframes record-pulse{ 0%,100%{opacity:1} 50%{opacity:0.25} }
 
-@keyframes slide-in-right {
-  from { transform: translateX(100%); opacity: 0; }
-  to { transform: translateX(0); opacity: 1; }
-}
-
-@keyframes slide-in-up {
-  from { transform: translateY(20px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
-}
-
-@keyframes fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
-}
-
-@keyframes float {
-  0%, 100% { transform: translateY(0px); }
-  50% { transform: translateY(-6px); }
-}
-
-.animate-slide-in-right {
-  animation: slide-in-right 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-.animate-slide-in-up {
-  animation: slide-in-up 0.3s ease-out forwards;
-}
-
-.animate-fade-in {
-  animation: fade-in 0.4s ease-out forwards;
-}
-
-.animate-float {
-  animation: float 3s ease-in-out infinite;
-}
+.anim-slide-up    { animation: slide-up 0.28s cubic-bezier(0.16,1,0.3,1) forwards; }
+.anim-slide-right { animation: slide-right 0.32s cubic-bezier(0.16,1,0.3,1) forwards; }
+.anim-fade-in     { animation: fade-in 0.35s ease forwards; }
+.anim-pop         { animation: pop 0.3s ease forwards; }
+.anim-float       { animation: float 3s ease-in-out infinite; }

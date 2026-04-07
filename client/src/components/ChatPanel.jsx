@@ -2,237 +2,255 @@ import React, { useState, useEffect, useRef } from 'react';
 import { socket } from '../utils/socket';
 import { useCosmosStore } from '../utils/store';
 
-function buildRoomId(a, b) {
-  return [a, b].sort().join('::');
+function buildRoomId(a,b) { return [a,b].sort().join('::'); }
+
+const CODE_EXTS = ['js','jsx','ts','tsx','py','cpp','c','java','go','rs','html','css','json','sh'];
+function isCodeFile(name) { return CODE_EXTS.some(e => name?.endsWith('.'+e)); }
+
+function FileMessage({ msg }) {
+  const isImg = msg.fileType?.startsWith('image/');
+  const isCode = isCodeFile(msg.fileName) || msg.type==='code';
+
+  if (isImg) {
+    return (
+      <div>
+        <img src={msg.fileData} alt={msg.fileName} style={{ maxWidth:200, maxHeight:160, borderRadius:8, display:'block', border:'1px solid var(--border)' }} />
+        <div style={{ fontSize:10, color:'var(--muted)', marginTop:3 }}>{msg.fileName}</div>
+      </div>
+    );
+  }
+  if (isCode) {
+    return (
+      <div style={{ background:'var(--bg2)', border:'1px solid var(--border)', borderRadius:8, overflow:'hidden', maxWidth:240 }}>
+        <div style={{ padding:'4px 10px', background:'var(--border)', fontSize:10, color:'var(--text2)', fontFamily:'DM Mono', display:'flex', justifyContent:'space-between' }}>
+          <span>{msg.fileName||'code'}</span>
+          <span style={{ cursor:'pointer', color:'var(--accent)' }} onClick={()=>navigator.clipboard.writeText(msg.text)}>copy</span>
+        </div>
+        <pre style={{ padding:'8px 10px', fontSize:11, fontFamily:'DM Mono', color:'var(--text)', overflowX:'auto', margin:0, whiteSpace:'pre-wrap', wordBreak:'break-all' }}>{msg.text}</pre>
+      </div>
+    );
+  }
+  // generic file
+  return (
+    <a href={msg.fileData} download={msg.fileName} style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', background:'var(--bg2)', border:'1px solid var(--border)', borderRadius:8, textDecoration:'none', color:'var(--text)', maxWidth:220 }}>
+      <span style={{ fontSize:20 }}>📎</span>
+      <div>
+        <div style={{ fontSize:12, fontWeight:500 }}>{msg.fileName}</div>
+        <div style={{ fontSize:10, color:'var(--muted)' }}>Click to download</div>
+      </div>
+    </a>
+  );
 }
 
 export default function ChatPanel() {
   const [text, setText] = useState('');
+  const [dragOver, setDragOver] = useState(false);
   const bottomRef = useRef(null);
+  const fileRef = useRef(null);
 
-  const self = useCosmosStore((s) => s.self);
-  const activeChatSocketId = useCosmosStore((s) => s.activeChatSocketId);
-  const closeChat = useCosmosStore((s) => s.closeChat);
-  const users = useCosmosStore((s) => s.users);
-  const messages = useCosmosStore((s) => s.messages);
-  const nearbyUsers = useCosmosStore((s) => s.nearbyUsers);
-  const resetUnread = useCosmosStore((s) => s.resetUnread);
+  const self = useCosmosStore(s => s.self);
+  const activeChatSocketId = useCosmosStore(s => s.activeChatSocketId);
+  const closeChat = useCosmosStore(s => s.closeChat);
+  const users = useCosmosStore(s => s.users);
+  const messages = useCosmosStore(s => s.messages);
+  const nearbyUsers = useCosmosStore(s => s.nearbyUsers);
+  const resetUnread = useCosmosStore(s => s.resetUnread);
+  const setCallState = useCosmosStore(s => s.setCallState);
+  const recordingActive = useCosmosStore(s => s.recordingActive);
+  const setRecordingActive = useCosmosStore(s => s.setRecordingActive);
 
-  // Use socket.id as fallback — it's always the canonical self identifier
-  const mySocketId = self?.socketId || socket.id;
-  const rid = mySocketId && activeChatSocketId
-    ? buildRoomId(mySocketId, activeChatSocketId)
-    : null;
-
-  const roomMessages = rid ? (messages[rid] || []) : [];
+  const myId = self?.socketId || socket.id;
+  const rid = myId && activeChatSocketId ? buildRoomId(myId, activeChatSocketId) : null;
+  const roomMessages = rid ? (messages[rid]||[]) : [];
   const chatPartner = activeChatSocketId ? users[activeChatSocketId] : null;
-  const isStillNear = nearbyUsers.some((u) => u.socketId === activeChatSocketId);
+  const isNear = nearbyUsers.some(u => u.socketId===activeChatSocketId);
 
+  useEffect(() => { resetUnread(); }, [activeChatSocketId]);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior:'smooth' }); }, [roomMessages.length]);
   useEffect(() => {
-    resetUnread();
-  }, [activeChatSocketId]);
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [roomMessages.length]);
-
-  // Auto-close when user walks away
-  useEffect(() => {
-    if (activeChatSocketId && !isStillNear) {
-      const t = setTimeout(closeChat, 800);
+    if (activeChatSocketId && !isNear) {
+      const t = setTimeout(closeChat, 900);
       return () => clearTimeout(t);
     }
-  }, [isStillNear, activeChatSocketId]);
+  }, [isNear, activeChatSocketId]);
 
   const send = () => {
-    if (!text.trim() || !activeChatSocketId) return;
-    socket.emit('chat:send', { toSocketId: activeChatSocketId, text: text.trim() });
+    if (!text.trim()||!activeChatSocketId) return;
+    socket.emit('chat:send', { toSocketId:activeChatSocketId, text:text.trim(), type:'text' });
     setText('');
   };
 
-  const onKey = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+  const sendFile = async file => {
+    if (!file||!activeChatSocketId) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      const isCode = isCodeFile(file.name);
+      const isText = file.type.startsWith('text/') || isCode;
+      if (isText) {
+        const textReader = new FileReader();
+        textReader.onload = ev => {
+          socket.emit('chat:send', {
+            toSocketId: activeChatSocketId,
+            type: isCode ? 'code' : 'text',
+            text: ev.target.result,
+            fileName: file.name,
+            fileType: file.type,
+          });
+        };
+        textReader.readAsText(file);
+      } else {
+        socket.emit('chat:send', {
+          toSocketId: activeChatSocketId,
+          type: file.type.startsWith('image/') ? 'image' : 'file',
+          fileData: e.target.result,
+          fileName: file.name,
+          fileType: file.type,
+          text: '',
+        });
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const onDrop = e => {
+    e.preventDefault(); setDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) sendFile(file);
+  };
+
+  const toggleRecording = () => {
+    if (!recordingActive) {
+      setRecordingActive(true);
+      socket.emit('recording:start', { toSocketId: activeChatSocketId });
+    } else {
+      setRecordingActive(false);
+      socket.emit('recording:stop', { toSocketId: activeChatSocketId });
+    }
   };
 
   if (!activeChatSocketId) return null;
 
   return (
-    <div className="animate-slide-in-right" style={{
-      position: 'fixed',
-      right: 0, top: 0, bottom: 0,
-      width: 320,
-      background: 'rgba(13,13,25,0.95)',
-      backdropFilter: 'blur(20px)',
-      borderLeft: '1px solid var(--cosmos-border)',
-      display: 'flex',
-      flexDirection: 'column',
-      zIndex: 100,
-    }}>
+    <div className="anim-slide-right" style={{
+      position:'fixed', right:0,top:0,bottom:0, width:340,
+      background:'var(--surface)', borderLeft:'1px solid var(--border)',
+      display:'flex', flexDirection:'column', zIndex:100,
+      boxShadow:'-4px 0 20px rgba(0,0,0,0.06)',
+    }}
+      onDragOver={e=>{e.preventDefault();setDragOver(true)}}
+      onDragLeave={()=>setDragOver(false)}
+      onDrop={onDrop}
+    >
+      {dragOver && (
+        <div style={{ position:'absolute',inset:0, background:'rgba(193,122,58,0.08)', border:'2px dashed var(--accent)', borderRadius:0, zIndex:10, display:'flex',alignItems:'center',justifyContent:'center', fontSize:14, color:'var(--accent)', fontWeight:600, pointerEvents:'none' }}>
+          Drop file to send
+        </div>
+      )}
+
       {/* Header */}
-      <div style={{
-        padding: '18px 20px',
-        borderBottom: '1px solid var(--cosmos-border)',
-        display: 'flex', alignItems: 'center', gap: 12,
-      }}>
-        <div style={{ position: 'relative' }}>
-          <div style={{
-            width: 40, height: 40, borderRadius: '50%',
-            background: chatPartner?.color || '#b57bee',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 20, border: '2px solid var(--cosmos-border)',
-          }}>
-            {chatPartner?.avatar || '🧑'}
+      <div style={{ padding:'14px 16px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', gap:10 }}>
+        <div style={{ position:'relative' }}>
+          <div style={{ width:36,height:36,borderRadius:'50%', background:chatPartner?.color||'#c17a3a', display:'flex',alignItems:'center',justifyContent:'center', fontSize:18, border:'2px solid var(--border)' }}>
+            {chatPartner?.avatar||'🧑'}
           </div>
-          <div style={{
-            position: 'absolute', bottom: 0, right: 0,
-            width: 10, height: 10, borderRadius: '50%',
-            background: isStillNear ? '#6ef7a0' : '#f76e6e',
-            border: '2px solid var(--cosmos-surface)',
-            transition: 'background 0.4s',
-          }} />
+          <div style={{ position:'absolute',bottom:0,right:0, width:9,height:9,borderRadius:'50%', background:isNear?'var(--green)':'var(--red)', border:'2px solid var(--surface)', transition:'background 0.4s' }}/>
+        </div>
+        <div style={{ flex:1 }}>
+          <div style={{ fontWeight:600,fontSize:13,color:'var(--text)' }}>{chatPartner?.displayName||chatPartner?.username||'?'}</div>
+          <div style={{ fontSize:10,color:'var(--muted)',fontFamily:'DM Mono' }}>{chatPartner?.permId||''}</div>
         </div>
 
-        <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--cosmos-text)' }}>
-            {chatPartner?.username || 'Unknown'}
-          </div>
-          <div style={{
-            fontSize: 11,
-            color: isStillNear ? '#6ef7a0' : 'var(--cosmos-muted)',
-            transition: 'color 0.4s',
-          }}>
-            {isStillNear ? '● In range' : '○ Moving away…'}
-          </div>
-        </div>
+        {/* Call buttons */}
+        <button title="Voice call" onClick={()=>{ socket.emit('call:request',{toSocketId:activeChatSocketId,callType:'voice'}); setCallState({phase:'outgoing',peerSocketId:activeChatSocketId,peerName:chatPartner?.displayName,callType:'voice'}); }} style={{ ...iconBtn }}>🎤</button>
+        <button title="Video call" onClick={()=>{ socket.emit('call:request',{toSocketId:activeChatSocketId,callType:'video'}); setCallState({phase:'outgoing',peerSocketId:activeChatSocketId,peerName:chatPartner?.displayName,callType:'video'}); }} style={{ ...iconBtn }}>📹</button>
 
-        <button onClick={closeChat} style={{
-          background: 'none', border: 'none',
-          color: 'var(--cosmos-muted)', cursor: 'pointer',
-          fontSize: 20, lineHeight: 1, padding: 4,
-          borderRadius: 6, transition: 'color 0.15s',
-        }}
-          onMouseEnter={(e) => e.target.style.color = 'var(--cosmos-text)'}
-          onMouseLeave={(e) => e.target.style.color = 'var(--cosmos-muted)'}
-        >×</button>
+        {/* Record */}
+        <button title={recordingActive?'Stop recording':'Start recording'} onClick={toggleRecording} style={{ ...iconBtn, color: recordingActive?'var(--red)':'var(--text2)', animation: recordingActive?'record-pulse 1.2s infinite':'' }}>
+          ⏺
+        </button>
+
+        <button onClick={closeChat} style={{ ...iconBtn, fontSize:16 }}>×</button>
       </div>
 
-      {/* Proximity warning */}
-      {!isStillNear && (
-        <div className="animate-slide-in-up" style={{
-          margin: '12px 16px 0',
-          padding: '10px 14px',
-          background: 'rgba(247,110,110,0.1)',
-          border: '1px solid rgba(247,110,110,0.25)',
-          borderRadius: 10, fontSize: 12, color: '#f79e9e',
-          display: 'flex', alignItems: 'center', gap: 8,
-        }}>
-          <span>⚠</span>
-          <span>Moving out of range. Chat will close.</span>
+      {/* Out of range warning */}
+      {!isNear && (
+        <div className="anim-slide-up" style={{ margin:'10px 12px 0', padding:'8px 12px', background:'rgba(194,58,58,0.07)', border:'1px solid rgba(194,58,58,0.2)', borderRadius:8, fontSize:11, color:'var(--red)', display:'flex',alignItems:'center',gap:6 }}>
+          ⚠ Moving out of range — chat will close
         </div>
       )}
 
       {/* Messages */}
-      <div style={{
-        flex: 1, overflowY: 'auto',
-        padding: '16px',
-        display: 'flex', flexDirection: 'column', gap: 10,
-      }}>
-        {roomMessages.length === 0 && (
-          <div style={{
-            textAlign: 'center', margin: 'auto',
-            color: 'var(--cosmos-muted)', fontSize: 13,
-          }}>
-            <div style={{ fontSize: 28, marginBottom: 8 }}>💬</div>
-            <div>You're in range!</div>
-            <div style={{ fontSize: 12, marginTop: 4 }}>Say something…</div>
+      <div style={{ flex:1,overflowY:'auto', padding:'12px', display:'flex',flexDirection:'column',gap:8 }}>
+        {roomMessages.length===0 && (
+          <div style={{ textAlign:'center',margin:'auto',color:'var(--muted)',fontSize:13 }}>
+            <div style={{ fontSize:26,marginBottom:6 }}>💬</div>
+            <div>You're in range — say something!</div>
           </div>
         )}
-
-        {roomMessages.map((msg, i) => {
-          // Determine if this message is from self using senderSocketId
-          const isMine = msg.senderSocketId === mySocketId;
+        {roomMessages.map((msg,i) => {
+          const mine = msg.senderSocketId === myId;
           return (
-            <div key={i} className="animate-slide-in-up" style={{
-              display: 'flex',
-              flexDirection: isMine ? 'row-reverse' : 'row',
-              gap: 8, alignItems: 'flex-end',
-            }}>
-              {!isMine && (
-                <div style={{
-                  width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
-                  background: msg.senderColor || '#b57bee',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 14,
-                }}>
-                  {chatPartner?.avatar || '🧑'}
+            <div key={i} className="anim-slide-up" style={{ display:'flex', flexDirection:mine?'row-reverse':'row', gap:7, alignItems:'flex-end' }}>
+              {!mine && (
+                <div style={{ width:26,height:26,borderRadius:'50%',flexShrink:0, background:msg.senderColor||'#c17a3a', display:'flex',alignItems:'center',justifyContent:'center',fontSize:13 }}>
+                  {chatPartner?.avatar||'🧑'}
                 </div>
               )}
-              <div style={{ maxWidth: '72%' }}>
-                <div style={{
-                  padding: '9px 13px',
-                  background: isMine
-                    ? 'linear-gradient(135deg, var(--cosmos-accent), var(--cosmos-accent2))'
-                    : 'rgba(255,255,255,0.06)',
-                  borderRadius: isMine ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
-                  color: isMine ? '#0a0a12' : 'var(--cosmos-text)',
-                  fontSize: 13, lineHeight: 1.5,
-                  border: isMine ? 'none' : '1px solid var(--cosmos-border)',
-                }}>
-                  {msg.text}
-                </div>
-                <div style={{
-                  fontSize: 10, color: 'var(--cosmos-muted)',
-                  marginTop: 3,
-                  textAlign: isMine ? 'right' : 'left',
-                }}>
-                  {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              <div style={{ maxWidth:'76%' }}>
+                {(msg.type==='image'||msg.type==='file'||msg.type==='code') ? (
+                  <FileMessage msg={msg} />
+                ) : (
+                  <div style={{
+                    padding:'8px 12px',
+                    background: mine?'var(--accent)':'var(--bg2)',
+                    borderRadius: mine?'14px 14px 3px 14px':'14px 14px 14px 3px',
+                    color: mine?'#fff':'var(--text)',
+                    fontSize:13, lineHeight:1.5,
+                    border: mine?'none':'1px solid var(--border)',
+                  }}>{msg.text}</div>
+                )}
+                <div style={{ fontSize:10,color:'var(--muted)',marginTop:2,textAlign:mine?'right':'left' }}>
+                  {new Date(msg.timestamp).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}
                 </div>
               </div>
             </div>
           );
         })}
-        <div ref={bottomRef} />
+        <div ref={bottomRef}/>
       </div>
 
       {/* Input */}
-      <div style={{ padding: '16px', borderTop: '1px solid var(--cosmos-border)' }}>
-        <div style={{
-          display: 'flex', gap: 8,
-          background: 'rgba(255,255,255,0.04)',
-          border: '1px solid var(--cosmos-border)',
-          borderRadius: 12, padding: '8px 12px',
-          alignItems: 'flex-end',
-        }}>
-          <textarea
-            rows={1}
-            placeholder={isStillNear ? 'Send a message…' : 'Moving out of range…'}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={onKey}
-            disabled={!isStillNear}
-            style={{
-              flex: 1, background: 'none', border: 'none', outline: 'none',
-              color: 'var(--cosmos-text)', fontSize: 13,
-              fontFamily: 'DM Sans', resize: 'none', lineHeight: 1.5,
-              maxHeight: 100, overflowY: 'auto',
-            }}
+      <div style={{ padding:'10px 12px', borderTop:'1px solid var(--border)' }}>
+        <div style={{ display:'flex',gap:6,background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:12,padding:'7px 10px',alignItems:'flex-end' }}>
+          {/* File attach */}
+          <button onClick={()=>fileRef.current?.click()} title="Attach file" style={{ ...iconBtn,fontSize:16,flexShrink:0 }}>📎</button>
+          <input ref={fileRef} type="file" style={{ display:'none' }} onChange={e=>{ if(e.target.files[0]) sendFile(e.target.files[0]); e.target.value=''; }}/>
+
+          <textarea rows={1} placeholder={isNear?'Message…':'Out of range…'}
+            value={text} onChange={e=>setText(e.target.value)}
+            onKeyDown={e=>{ if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();} }}
+            disabled={!isNear}
+            style={{ flex:1,background:'none',border:'none',outline:'none',color:'var(--text)',fontSize:13,fontFamily:'DM Sans',resize:'none',lineHeight:1.5,maxHeight:100,overflowY:'auto' }}
           />
-          <button onClick={send} disabled={!text.trim() || !isStillNear} style={{
-            background: text.trim() && isStillNear
-              ? 'linear-gradient(135deg, var(--cosmos-accent), var(--cosmos-accent2))'
-              : 'transparent',
-            border: 'none', borderRadius: 8,
-            width: 32, height: 32, cursor: 'pointer',
-            color: text.trim() && isStillNear ? '#0a0a12' : 'var(--cosmos-muted)',
-            fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            transition: 'all 0.2s', flexShrink: 0,
+
+          <button onClick={send} disabled={!text.trim()||!isNear} style={{
+            background: text.trim()&&isNear?'var(--accent)':'transparent',
+            border:'none',borderRadius:8,width:30,height:30,cursor:'pointer',
+            color: text.trim()&&isNear?'#fff':'var(--muted)',
+            fontSize:15,display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.2s',flexShrink:0,
           }}>↑</button>
         </div>
-        <p style={{
-          fontSize: 10, color: 'var(--cosmos-muted)',
-          marginTop: 6, textAlign: 'center',
-        }}>Enter to send · Stay in range to chat</p>
+        <p style={{ fontSize:10,color:'var(--muted)',marginTop:5,textAlign:'center' }}>
+          Enter to send · drag & drop files · {recordingActive && <span style={{ color:'var(--red)', animation:'record-pulse 1.2s infinite' }}>● Recording</span>}
+        </p>
       </div>
     </div>
   );
 }
+
+const iconBtn = {
+  background:'none', border:'1px solid var(--border)', borderRadius:7,
+  width:28,height:28, cursor:'pointer', fontSize:13,
+  display:'flex',alignItems:'center',justifyContent:'center',
+  color:'var(--text2)', transition:'all 0.15s', flexShrink:0,
+};

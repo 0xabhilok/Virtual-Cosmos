@@ -4,8 +4,9 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        display: ['"Space Mono"', 'monospace'],
-        body: ['"DM Sans"', 'sans-serif'],
+        display: ['Fraunces', 'Georgia', 'serif'],
+        mono:    ['DM Mono', 'monospace'],
+        body:    ['DM Sans', 'sans-serif'],
       },
     },
   },
