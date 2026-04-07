@@ -1,12 +1,29 @@
 {
   "name": "virtual-cosmos",
+  "version": "4.0.0",
+  "description": "Real-time proximity-based virtual social space with Among Us characters, WebRTC calls, and friends system",
   "private": true,
   "scripts": {
     "dev": "concurrently \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
     "install:all": "npm install && npm install --prefix server && npm install --prefix client",
     "dev:server": "npm run dev --prefix server",
-    "dev:client": "npm run dev --prefix client"
+    "dev:client": "npm run dev --prefix client",
+    "build": "npm run build --prefix client"
   },
+  "keywords": [
+    "react",
+    "nodejs",
+    "socketio",
+    "pixijs",
+    "webrtc",
+    "mongodb",
+    "mern",
+    "real-time",
+    "proximity",
+    "virtual-space"
+  ],
+  "author": "Abhilok Reddy <0xabhilok>",
+  "license": "MIT",
   "devDependencies": {
     "concurrently": "^8.2.2"
   }
